@@ -263,6 +263,13 @@ sealed class FlagshipRouterApp : Form
             s.IsStatusBarEnabled = false;
             s.IsZoomControlEnabled = false;
             s.IsPinchZoomEnabled = false;
+            // Prefetch pages in the background on hover/link render so
+            // dashboard page-to-page navigation starts instantly.
+            try { web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "try{document.addEventListener('mouseover',function(e){" +
+                "var a=e.target&&e.target.closest?e.target.closest('a[href^=\"/dashboard\"]'):null;" +
+                "if(a&&!a.dataset.frPre){a.dataset.frPre='1';fetch(a.href,{method:'HEAD',credentials:'same-origin'}).catch(function(){})}" +
+                "},true)}catch(e){}"); } catch { }
             // Keep visual size exact under DPI scaling (no fractional snapping blur).
             web.ZoomFactor = 1.0;
             webReady = true;
@@ -295,6 +302,65 @@ sealed class FlagshipRouterApp : Form
             }
             catch { }
         });
+    }
+
+    // Warmup: after the server answers, hit the heaviest dashboard routes so
+    // Next.js compiles/caches them before the user clicks.
+    static readonly string[] WarmupPaths = new string[]
+    {
+        "/dashboard/cli-tools",
+        "/dashboard",
+        "/api/cli-tools/all-statuses",
+        "/dashboard/usage",
+        "/dashboard/models",
+        "/dashboard/providers"
+    };
+
+    void WarmupServer()
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                Thread.Sleep(1500);
+                using (var client = new System.Net.WebClient())
+                {
+                    client.Headers.Add("User-Agent", "FlagshipRouter-Warmup");
+                    foreach (var p in WarmupPaths)
+                    {
+                        if (quitting) return;
+                        try { client.DownloadString("http://127.0.0.1:" + Port + p); }
+                        catch { }
+                    }
+                }
+                Log("warmup done");
+            }
+            catch { }
+        });
+    }
+
+    // Steady-state: keep the server's route-compilation cache warm so the
+    // user never pays a cold compile (~2s) for page navigation. Ping the
+    // main dashboard every 30s.
+    System.Windows.Forms.Timer warmKeeper;
+    void StartWarmKeeper()
+    {
+        warmKeeper = new System.Windows.Forms.Timer();
+        warmKeeper.Interval = 30000;
+        warmKeeper.Tick += (s, e) =>
+        {
+            if (quitting) return;
+            try
+            {
+                using (var c = new System.Net.WebClient())
+                {
+                    c.Headers.Add("User-Agent", "FlagshipRouter-Keeper");
+                    c.DownloadString("http://127.0.0.1:" + Port + "/dashboard");
+                }
+            }
+            catch { }
+        };
+        warmKeeper.Start();
     }
 
     bool IsServerAliveFast()
@@ -357,6 +423,8 @@ sealed class FlagshipRouterApp : Form
             psi.EnvironmentVariables["HOSTNAME"] = "0.0.0.0";
             serverProc = Process.Start(psi);
             Log("server started pid=" + (serverProc != null ? serverProc.Id.ToString() : "?"));
+            WarmupServer();
+            StartWarmKeeper();
         }
         catch (Exception ex) { Log("start failed: " + ex.Message); }
     }
@@ -381,6 +449,7 @@ sealed class FlagshipRouterApp : Form
     {
         quitting = true;
         healthTimer.Stop();
+        if (warmKeeper != null) warmKeeper.Stop();
         try
         {
             if (serverProc != null && !serverProc.HasExited)

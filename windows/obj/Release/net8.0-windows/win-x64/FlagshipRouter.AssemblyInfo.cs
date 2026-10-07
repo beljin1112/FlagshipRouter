@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FlagshipRouter")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+442148d79b15ef588e02713b3a59a2678cc54be0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f44464ca86d6a892a5edecc725b1aa49551d1d5d")]
 [assembly: System.Reflection.AssemblyProductAttribute("FlagshipRouter")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FlagshipRouter")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
