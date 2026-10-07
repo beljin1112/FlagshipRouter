@@ -2,8 +2,9 @@
 windows/bin/
 windows/obj/
 
-# Ready-to-run package (large; rebuild with npm run package)
+# Ready-to-run package + preserved server build (rebuilt by CI / package.cjs)
 windows/dist/
+windows/server-build/
 
 node_modules/
 .next/

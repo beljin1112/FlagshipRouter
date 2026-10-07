@@ -1,4 +1,0 @@
-C:\Users\linkw\FlagshipRouter\windows\bin\Microsoft.Web.WebView2.Core.xml
-C:\Users\linkw\FlagshipRouter\windows\bin\Microsoft.Web.WebView2.WinForms.xml
-C:\Users\linkw\FlagshipRouter\windows\bin\Microsoft.Web.WebView2.Wpf.xml
-C:\Users\linkw\FlagshipRouter\windows\bin\FlagshipRouter.exe
