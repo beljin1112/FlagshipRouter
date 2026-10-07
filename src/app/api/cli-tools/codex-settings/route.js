@@ -6,6 +6,7 @@ import path from "path";
 import os from "os";
 import { parseTOML, stringifyTOML } from "confbox";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,7 @@ export async function GET() {
       installed: true,
       config,
       hasRouter: hasRouterConfig(config),
+      hasBackup: await hasToolBackup("codex"),
       configPath: getCodexConfigPath(),
     });
   } catch (error) {
@@ -118,6 +120,12 @@ export async function POST(request) {
 
     const codexDir = getCodexDir();
     const configPath = getCodexConfigPath();
+
+    // Backup original files before making changes
+    await backupToolFiles("codex", {
+      config: configPath,
+      auth: getCodexAuthPath(),
+    });
 
     // Ensure directory exists
     await fs.mkdir(codexDir, { recursive: true });
@@ -163,9 +171,19 @@ export async function POST(request) {
   }
 }
 
-// DELETE - Remove FlagshipRouter settings only (keep other settings)
+// DELETE - Restore original settings from backup or remove FlagshipRouter settings
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("codex");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Codex configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const configPath = getCodexConfigPath();
 
     // Read and parse existing config

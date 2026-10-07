@@ -85,7 +85,7 @@ export function getSamlBaseUrl(request, settings) {
     }
   }
 
-  return "http://localhost:20128";
+  return "http://localhost:20120";
 }
 
 export function createSamlInstance(settings, origin) {

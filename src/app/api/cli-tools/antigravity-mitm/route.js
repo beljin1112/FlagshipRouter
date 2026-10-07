@@ -17,7 +17,7 @@ import { BRAND } from "open-sse/config/brand.js";
 
 initDbHooks(getSettings, updateSettings);
 
-const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
+const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20120";
 
 function normalizeMitmRouterBaseUrlInput(input) {
   if (input == null || String(input).trim() === "") {

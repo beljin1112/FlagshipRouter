@@ -249,12 +249,13 @@ export default function ClaudeToolCard({
       const res = await fetch("/api/cli-tools/claude-settings", { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: "Settings reset successfully!" });
+        setMessage({ type: "success", text: data.message || "Settings restored to default successfully!" });
         tool.defaultModels.forEach((model) => onModelMappingChange(model.alias, model.defaultValue || ""));
         setSelectedApiKey("");
         setExaMcpEnabled(false);
         setAutoCompactWindow("");
         setOneMContext(false);
+        await checkClaudeStatus();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to reset settings" });
       }
@@ -473,8 +474,8 @@ export default function ClaudeToolCard({
                 <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={!hasActiveProviders} loading={applying}>
                   <span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleResetSettings} disabled={!claudeStatus?.hasRouter} loading={restoring}>
-                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset
+                <Button variant="outline" size="sm" onClick={handleResetSettings} disabled={!claudeStatus?.hasRouter && !claudeStatus?.hasBackup} loading={restoring}>
+                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Restore to Default
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)}>
                   <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>Manual Config

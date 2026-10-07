@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/oauth/codex/bulk-import/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"C:\\Users\\linkw\\FlagshipRouter\\src\\app\\api\\oauth\\codex\\bulk-import\\route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}};

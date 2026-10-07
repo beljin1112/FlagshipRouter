@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 // Resolve chatLanguageModels.json path per OS
 const getConfigPath = () => {
@@ -51,6 +52,7 @@ export async function GET() {
       installed: true,
       config,
       hasRouter: hasRouterConfig(config),
+      hasBackup: await hasToolBackup("copilot"),
       configPath: getConfigPath(),
       currentModel: entry?.models?.[0]?.id || null,
       currentUrl: entry?.models?.[0]?.url || null,
@@ -71,6 +73,12 @@ export async function POST(request) {
     }
 
     const configPath = getConfigPath();
+
+    // Backup original files before making changes
+    await backupToolFiles("copilot", {
+      config: configPath,
+    });
+
     await fs.mkdir(path.dirname(configPath), { recursive: true });
 
     // Read existing config array
@@ -123,6 +131,16 @@ export async function POST(request) {
 // DELETE - Remove FlagshipRouter entry from chatLanguageModels.json
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("copilot");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Copilot configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const configPath = getConfigPath();
 
     let config = [];

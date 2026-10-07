@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/tunnel/tailscale-enable/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"C:\\Users\\linkw\\FlagshipRouter\\src\\app\\api\\tunnel\\tailscale-enable\\route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}};

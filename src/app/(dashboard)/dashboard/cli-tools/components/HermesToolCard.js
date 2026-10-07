@@ -115,7 +115,7 @@ export default function HermesToolCard({
     if (typeof window !== "undefined") {
       return normalizeLocalhost(window.location.origin);
     }
-    return "http://127.0.0.1:20128";
+    return "http://127.0.0.1:20120";
   };
 
   const getEffectiveBaseUrl = () => {
@@ -168,7 +168,7 @@ export default function HermesToolCard({
       const res = await fetch(ENDPOINT, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: "Settings reset successfully!" });
+        setMessage({ type: "success", text: data.message || "Settings restored to default successfully!" });
         setSelectedModel("");
         setRoleModels({});
         checkStatus();
@@ -366,8 +366,8 @@ export default function HermesToolCard({
                 <Button variant="primary" size="sm" onClick={handleApply} disabled={!selectedModel} loading={applying} className="w-full sm:w-auto">
                   <span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleReset} disabled={!hermesStatus?.hasRouter} loading={restoring} className="w-full sm:w-auto">
-                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset
+                <Button variant="outline" size="sm" onClick={handleReset} disabled={!hermesStatus?.hasRouter && !hermesStatus?.hasBackup} loading={restoring} className="w-full sm:w-auto">
+                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Restore to Default
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto">
                   <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>Manual Config

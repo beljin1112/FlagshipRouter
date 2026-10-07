@@ -8,6 +8,7 @@ import crypto from "crypto";
 import { DEFAULT_PLUGINS, LOCAL_STDIO_PLUGINS, buildManagedMcpServers } from "@/shared/constants/coworkPlugins";
 import { UPDATER_CONFIG } from "@/shared/constants/config";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const APP_PORT = UPDATER_CONFIG.appPort;
 const CLI_TOKEN_HEADER = "x-fr-cli-token";
@@ -275,6 +276,7 @@ export async function GET() {
       installed: true,
       config,
       hasRouter,
+      hasBackup: await hasToolBackup("cowork"),
       configPath,
       cowork: {
         appliedId,
@@ -334,6 +336,11 @@ export async function POST(request) {
     const meta = await ensureMeta();
     const configPath = path.join(getWriteConfigDir(), `${meta.appliedId}.json`);
 
+    // Backup original files before making changes
+    await backupToolFiles("cowork", {
+      config: configPath,
+    });
+
     const newConfig = {
       ...SECURITY_RELAX,
       inferenceProvider: PROVIDER,
@@ -370,6 +377,18 @@ export async function POST(request) {
 
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("cowork");
+    if (backupResult.restored) {
+      try { await writeSkipApprovals([]); } catch { /* ignore */ }
+      try { await cleanup1pLegacy(); } catch { /* ignore */ }
+      return NextResponse.json({
+        success: true,
+        message: "Original Cowork configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const meta = await readJson(await getMetaPath());
     if (!meta?.appliedId) {
       return NextResponse.json({ success: true, message: "No active config to reset" });

@@ -157,7 +157,7 @@ export default function GrokBuildToolCard({
   const getEffectiveBaseUrl = () => {
     const url = customBaseUrl || (typeof window !== "undefined"
       ? window.location.origin.replace("://localhost", "://127.0.0.1")
-      : "http://127.0.0.1:20128");
+      : "http://127.0.0.1:20120");
     return url.endsWith("/v1") ? url : `${url}/v1`;
   };
 
@@ -208,7 +208,7 @@ export default function GrokBuildToolCard({
       const res = await fetch(ENDPOINT, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: "Settings reset successfully!" });
+        setMessage({ type: "success", text: data.message || "Settings restored to default successfully!" });
         setSelectedModel("");
         setSubagentModels({});
         checkStatus();
@@ -362,7 +362,7 @@ export default function GrokBuildToolCard({
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <Button variant="primary" size="sm" onClick={handleApply} disabled={!selectedModel} loading={applying} className="w-full sm:w-auto"><span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply</Button>
-                <Button variant="outline" size="sm" onClick={handleReset} disabled={!grokStatus?.hasRouter} loading={restoring} className="w-full sm:w-auto"><span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset</Button>
+                <Button variant="outline" size="sm" onClick={handleReset} disabled={!grokStatus?.hasRouter && !grokStatus?.hasBackup} loading={restoring} className="w-full sm:w-auto"><span className="material-symbols-outlined text-[14px] mr-1">restore</span>Restore to Default</Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto"><span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>Manual Config</Button>
               </div>
             </>

@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const execAsync = promisify(exec);
 
@@ -70,8 +71,9 @@ export async function GET() {
 
     return NextResponse.json({
       installed: true,
-      settings,
+      settings: settings,
       hasRouter: hasRouterConfig(settings),
+      hasBackup: await hasToolBackup("droid"),
       settingsPath: getDroidSettingsPath(),
     });
   } catch (error) {
@@ -96,6 +98,11 @@ export async function POST(request) {
 
     const droidDir = getDroidDir();
     const settingsPath = getDroidSettingsPath();
+
+    // Backup original files before making changes
+    await backupToolFiles("droid", {
+      settings: settingsPath,
+    });
 
     // Ensure directory exists
     await fs.mkdir(droidDir, { recursive: true });
@@ -175,6 +182,16 @@ export async function POST(request) {
 // DELETE - Remove FlagshipRouter customModels only (keep other settings)
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("droid");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Factory Droid configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const settingsPath = getDroidSettingsPath();
 
     // Read existing settings

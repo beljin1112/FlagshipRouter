@@ -206,7 +206,7 @@ export default function CoworkToolCard({
       const res = await fetch(ENDPOINT, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: "Settings reset successfully" });
+        setMessage({ type: "success", text: data.message || "Settings restored to default successfully!" });
         setSelectedModels([]);
         setPlugins(status?.defaultPlugins || []);
         setLocalPlugins([]);
@@ -502,8 +502,8 @@ export default function CoworkToolCard({
                 <Button variant="primary" size="sm" onClick={handleApply} disabled={selectedModels.length === 0} loading={applying} className="w-full sm:w-auto">
                   <span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleReset} disabled={!status.hasRouter} loading={restoring} className="w-full sm:w-auto">
-                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset
+                <Button variant="outline" size="sm" onClick={handleReset} disabled={!status?.hasRouter && !status?.hasBackup} loading={restoring} className="w-full sm:w-auto">
+                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Restore to Default
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto">
                   <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>Manual Config

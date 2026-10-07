@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const execAsync = promisify(exec);
 
@@ -115,6 +116,7 @@ export async function GET() {
             installed: true,
             settings: config,
             hasRouter: hasRouterConfig(config),
+            hasBackup: await hasToolBackup("deepseek-tui"),
             configPath: getDeepSeekConfigPath(),
         });
     } catch (error) {
@@ -131,6 +133,13 @@ export async function POST(request) {
         }
 
         const dir = getDeepSeekDir();
+        const configPath = getDeepSeekConfigPath();
+
+        // Backup original files before making changes
+        await backupToolFiles("deepseek-tui", {
+            config: configPath,
+        });
+
         await fs.mkdir(dir, { recursive: true });
 
         const newConfig = buildRouterConfig(baseUrl, apiKey || `sk_${BRAND.modelPrefix}`, model);
@@ -149,6 +158,16 @@ export async function POST(request) {
 
 export async function DELETE() {
     try {
+        // Attempt restoring original configuration from backup first
+        const backupResult = await restoreToolBackup("deepseek-tui");
+        if (backupResult.restored) {
+            return NextResponse.json({
+                success: true,
+                message: "Original DeepSeek TUI configuration restored successfully",
+                restoredFromBackup: true,
+            });
+        }
+
         const configPath = getDeepSeekConfigPath();
         try {
             await fs.access(configPath);

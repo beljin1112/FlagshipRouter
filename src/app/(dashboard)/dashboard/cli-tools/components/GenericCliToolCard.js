@@ -177,7 +177,7 @@ export default function GenericCliToolCard({
       const res = await fetch(endpointUrl, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: data.message || "Settings removed successfully." });
+        setMessage({ type: "success", text: data.message || "Settings restored to default successfully." });
         await checkStatus();
       } else {
         setMessage({ type: "error", text: data.error?.message || "Failed to reset settings." });
@@ -593,15 +593,15 @@ export default function GenericCliToolCard({
                   >
                     {applying ? "Applying..." : "Apply Settings"}
                   </Button>
-                  {status?.hasRouter && (
+                  {(status?.hasRouter || status?.hasBackup) && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleRestore}
                       disabled={restoring || checking}
-                      className="text-red-500 hover:text-red-600 hover:border-red-500/50"
                     >
-                      {restoring ? "Removing..." : "Remove from Tool"}
+                      <span className="material-symbols-outlined text-[14px] mr-1">restore</span>
+                      {restoring ? "Restoring..." : "Restore to Default"}
                     </Button>
                   )}
                 </div>

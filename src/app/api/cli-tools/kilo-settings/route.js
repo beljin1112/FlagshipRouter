@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const execAsync = promisify(exec);
 
@@ -64,6 +65,7 @@ export async function GET() {
       installed: true,
       settings: { auth: auth ? Object.keys(auth) : [] },
       hasRouter: hasRouterConfig(auth),
+      hasBackup: await hasToolBackup("kilo"),
       authPath: getAuthPath(),
     });
   } catch (error) {
@@ -78,6 +80,12 @@ export async function POST(request) {
     if (!baseUrl || !apiKey || !model) {
       return NextResponse.json({ error: "baseUrl, apiKey and model are required" }, { status: 400 });
     }
+
+    // Backup original files before making changes
+    await backupToolFiles("kilo", {
+      auth: getAuthPath(),
+      vscode: getVscodeSettingsPath(),
+    });
 
     await fs.mkdir(getDataDir(), { recursive: true });
 
@@ -109,6 +117,16 @@ export async function POST(request) {
 
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("kilo");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Kilo Code configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const auth = await readJson(getAuthPath());
     if (!auth) {
       return NextResponse.json({ success: true, message: "No settings file to reset" });

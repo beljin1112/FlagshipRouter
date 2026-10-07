@@ -111,7 +111,7 @@ export default function KiloToolCard({ tool, isExpanded, onToggle, baseUrl, apiK
       const res = await fetch("/api/cli-tools/kilo-settings", { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: "Settings reset successfully!" });
+        setMessage({ type: "success", text: data.message || "Settings restored to default successfully!" });
         setSelectedModel("");
         checkStatus();
       } else {
@@ -245,8 +245,8 @@ export default function KiloToolCard({ tool, isExpanded, onToggle, baseUrl, apiK
                 <Button variant="primary" size="sm" onClick={handleApply} disabled={(!selectedApiKey && (cloudEnabled && apiKeys.length > 0)) || !selectedModel} loading={applying}>
                   <span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleReset} disabled={restoring} loading={restoring}>
-                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset
+                <Button variant="outline" size="sm" onClick={handleReset} disabled={restoring || (!status?.hasRouter && !status?.hasBackup)} loading={restoring}>
+                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Restore to Default
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)}>
                   <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>Manual Config

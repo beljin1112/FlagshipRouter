@@ -7,6 +7,7 @@ import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const execAsync = promisify(exec);
 
@@ -33,7 +34,7 @@ const hasRouterConfig = (settings) => {
   if (!settings) return false;
   return (
     settings._managedBy === BRAND.modelPrefix ||
-    (typeof settings.baseUrl === "string" && settings.baseUrl.length > 0 && settings.baseUrl.includes("20128"))
+    (typeof settings.baseUrl === "string" && settings.baseUrl.length > 0 && (settings.baseUrl.includes("20120") || settings.baseUrl.includes("20128")))
   );
 };
 
@@ -63,6 +64,7 @@ export async function GET() {
       installed: true,
       config,
       hasRouter: hasRouterConfig(config),
+      hasBackup: await hasToolBackup("smelt"),
       configPath: getSmeltConfigPath(),
     });
   } catch (err) {
@@ -85,6 +87,12 @@ export async function POST(request) {
     }
 
     const configPath = getSmeltConfigPath();
+
+    // Backup original files before making changes
+    await backupToolFiles("smelt", {
+      config: configPath,
+    });
+
     await fs.mkdir(getSmeltDir(), { recursive: true });
 
     let existing = {};
@@ -116,6 +124,16 @@ export async function POST(request) {
 
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("smelt");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Smelt configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const configPath = getSmeltConfigPath();
     let existing = {};
     try {

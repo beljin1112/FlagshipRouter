@@ -1,0 +1,1 @@
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[4520],{39530:(e,n,s)=>{Promise.resolve().then(s.bind(s,83016))},83016:(e,n,s)=>{"use strict";s.r(n),s.d(n,{default:()=>u});var r=s(12115);function u(){return(0,r.useEffect)(()=>{window.location.replace("/dashboard")},[]),null}}},e=>{e.O(0,[8441,3794,7358],()=>e(e.s=39530)),_N_E=e.O()}]);

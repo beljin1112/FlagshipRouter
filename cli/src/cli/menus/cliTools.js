@@ -126,7 +126,7 @@ async function claudeSelectModel(modelType, port) {
  */
 async function claudeReset() {
   const result = await api.resetCliToolSettings("claude");
-  showStatus(result.success ? "Settings reset successfully!" : `Failed: ${result.error}`, result.success ? "success" : "error");
+  showStatus(result.success ? (result.data?.message || "Claude Code settings restored to default!") : `Failed: ${result.error}`, result.success ? "success" : "error");
   await pause();
 }
 

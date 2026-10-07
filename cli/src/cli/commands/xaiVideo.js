@@ -14,7 +14,7 @@ const fs = require("fs");
 const path = require("path");
 const BRAND = require("../../brand");
 
-const DEFAULT_PORT = 20128;
+const DEFAULT_PORT = 20120;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_MODEL = "xai/grok-imagine-video";
 const DEFAULT_TIMEOUT_SEC = 600;

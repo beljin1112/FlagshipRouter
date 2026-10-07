@@ -7,6 +7,7 @@ import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { BRAND } from "open-sse/config/brand.js";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const execAsync = promisify(exec);
 
@@ -46,7 +47,7 @@ const readModelsYml = async () => {
 
 const hasRouterInYml = (content) => {
   if (!content) return false;
-  return content.includes(`${BRAND.modelPrefix}:`) || content.includes("localhost:20128");
+  return content.includes(`${BRAND.modelPrefix}:`) || content.includes("localhost:20120") || content.includes("localhost:20128");
 };
 
 // Build standard FlagshipRouter provider block for models.yml
@@ -80,6 +81,7 @@ export async function GET() {
     return NextResponse.json({
       installed: true,
       hasRouter,
+      hasBackup: await hasToolBackup("omp"),
       configPath: getOmpModelsYmlPath(),
     });
   } catch (err) {
@@ -100,6 +102,11 @@ export async function POST(request) {
     if (!baseUrl) {
       return NextResponse.json({ error: { message: "baseUrl is required" } }, { status: 400 });
     }
+
+    // Backup original files before making changes
+    await backupToolFiles("omp", {
+      config: getOmpModelsYmlPath(),
+    });
 
     await fs.mkdir(getOmpDir(), { recursive: true });
 
@@ -160,6 +167,16 @@ export async function POST(request) {
 
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("omp");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Oh My Pi configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     let ymlContent = await readModelsYml();
     const regex = new RegExp(`\\s*${PROVIDER_ID}:[\\s\\S]*?(?=\\n\\s*\\w+:|$)`, "g");
     ymlContent = ymlContent.replace(regex, "");

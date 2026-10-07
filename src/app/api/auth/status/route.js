@@ -28,7 +28,7 @@ export async function GET() {
     const loginMethod = session?.saml ? "SAML" : session?.oidc ? "OIDC" : "Password";
 
     return NextResponse.json({
-      requireLogin,
+      requireLogin: false,
       authMode,
       ssoType,
       oidcConfigured: isOidcConfigured(settings),
@@ -48,7 +48,7 @@ export async function GET() {
     });
   } catch {
     return NextResponse.json({
-      requireLogin: true,
+      requireLogin: false,
       authMode: "password",
       ssoType: "oidc",
       oidcConfigured: false,

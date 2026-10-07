@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { DEFAULT_PLUGINS } from "@/shared/constants/coworkPlugins";
+import { backupToolFiles, restoreToolBackup, hasToolBackup } from "@/lib/cliToolsBackup";
 
 const execAsync = promisify(exec);
 
@@ -108,6 +109,7 @@ export async function GET() {
       installed: true,
       settings: settings,
       hasRouter: hasRouter,
+      hasBackup: await hasToolBackup("claude"),
       exaMcpEnabled: !!claudeJson?.mcpServers?.exa,
       settingsPath: getClaudeSettingsPath(),
     });
@@ -134,6 +136,12 @@ export async function POST(request) {
 
     const settingsPath = getClaudeSettingsPath();
     const claudeDir = path.dirname(settingsPath);
+
+    // Backup original files before making changes
+    await backupToolFiles("claude", {
+      settings: settingsPath,
+      claudeJson: getClaudeJsonPath(),
+    });
 
     // Ensure .claude directory exists
     await fs.mkdir(claudeDir, { recursive: true });
@@ -212,9 +220,19 @@ const RESET_ENV_KEYS = [
   "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
 ];
 
-// DELETE - Reset settings (remove env fields)
+// DELETE - Restore original settings from backup or reset settings (remove env fields)
 export async function DELETE() {
   try {
+    // Attempt restoring original configuration from backup first
+    const backupResult = await restoreToolBackup("claude");
+    if (backupResult.restored) {
+      return NextResponse.json({
+        success: true,
+        message: "Original Claude Code configuration restored successfully",
+        restoredFromBackup: true,
+      });
+    }
+
     const settingsPath = getClaudeSettingsPath();
 
     // Read current settings
