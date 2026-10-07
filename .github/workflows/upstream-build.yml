@@ -1,0 +1,124 @@
+name: Track upstream and build desktop EXE
+
+on:
+  schedule:
+    # Check upstream every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even if upstream unchanged"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: theRizwan/FlagshipRouter
+  UPSTREAM_BRANCH: main
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      upstream_sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Get upstream HEAD
+        id: check
+        run: |
+          SHA=$(git ls-remote https://github.com/${{ env.UPSTREAM_REPO }}.git refs/heads/${{ env.UPSTREAM_BRANCH }} | cut -f1)
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Upstream HEAD: $SHA"
+          if [ -f upstream.sha ]; then
+            echo "Previous: $(cat upstream.sha)"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: build
+          path: local
+      - name: Compare with last built SHA
+        id: compare
+        run: |
+          cd local
+          SHA="${{ steps.check.outputs.sha }}"
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Forced rebuild"
+          elif [ -f .upstream-sha ] && [ "$(cat .upstream-sha)" = "$SHA" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Upstream unchanged — skipping build"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "New upstream commits — building"
+          fi
+
+  build-release:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.changed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: build
+
+      - name: Sync upstream web sources
+        run: |
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git
+          git fetch upstream ${{ env.UPSTREAM_BRANCH }} --depth 1
+          # Take fresh web sources from upstream, keep our EXE shell + CI files
+          git checkout upstream/${{ env.UPSTREAM_BRANCH }} -- src open-sse public cli next.config.mjs postcss.config.mjs eslint.config.mjs jsconfig.json custom-server.js package.json 2>$null
+          echo "${{ needs.check-upstream.outputs.upstream_sha }}" > .upstream-sha
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+
+      - name: Bundle Node runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path windows/dist/node | Out-Null
+          # Use the CI's Node as the bundled runtime
+          Copy-Item (Join-Path (Split-Path (Get-Command node.exe).Source) "node.exe") windows/dist/node/node.exe
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish EXE
+        run: dotnet publish windows/FlagshipRouter.csproj -c Release -o windows/bin
+
+      - name: Assemble dist
+        run: node windows/package.cjs
+
+      - name: Zip dist
+        shell: pwsh
+        run: Compress-Archive -Path windows/dist/* -DestinationPath FlagshipRouter-windows-x64.zip -Force
+
+      - name: Commit synced sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync upstream ${{ needs.check-upstream.outputs.upstream_sha }}" || echo "nothing to commit"
+          git push origin build
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ needs.check-upstream.outputs.upstream_sha }}
+          name: FlagshipRouter auto-build ${{ needs.check-upstream.outputs.upstream_sha }}
+          body: |
+            Automatic build tracking upstream `${{ env.UPSTREAM_REPO }}` @ `${{ needs.check-upstream.outputs.upstream_sha }}`.
+            Download `FlagshipRouter-windows-x64.zip`, extract, run `FlagshipRouter.exe`.
+          files: FlagshipRouter-windows-x64.zip
+          prerelease: false
