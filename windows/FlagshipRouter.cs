@@ -19,6 +19,17 @@ sealed class FlagshipRouterApp : Form
     const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RunValueName = "FlagshipRouter";
 
+    // Auto-update: which GitHub repo publishes FlagshipRouter-windows-x64.zip
+    // releases. CI on that repo rebuilds on upstream changes (see
+    // .github/workflows/upstream-build.yml on the build branch).
+    const string UpdateOwner = "theRizwan";
+    const string UpdateRepo = "FlagshipRouter";
+    const string UpdateAsset = "FlagshipRouter-windows-x64.zip";
+    // Baked at publish time; CI stamps this via /p:AppVersion=<sha>.
+    // Defaults to dev-local when built without stamping.
+    static string StampedVersion = System.IO.File.Exists(VersionFile) ? System.IO.File.ReadAllText(VersionFile).Trim() : "dev-local";
+    static readonly string VersionFile = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "app.version");
+
     // Per-Monitor DPI Awareness v2 — without this Windows bitmap-scales the
     // WebView2 surface on scaled displays, which renders text blurry ("glare").
     [DllImport("user32.dll")]
@@ -41,6 +52,7 @@ sealed class FlagshipRouterApp : Form
     WebView2 web;
     System.Windows.Forms.Timer healthTimer;
     ToolStripMenuItem statusItem;
+    ToolStripMenuItem updateItem;
     int crashCount;
     DateTime lastStartUtc = DateTime.MinValue;
     bool quitting;
@@ -196,6 +208,9 @@ sealed class FlagshipRouterApp : Form
         menu.Items.Add(autoItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Restart Server", null, (s, e) => RestartServer());
+        updateItem = new ToolStripMenuItem("Check for Updates");
+        updateItem.Click += (s, e) => CheckForUpdates(manual: true);
+        menu.Items.Add(updateItem);
         menu.Items.Add("Quit", null, (s, e) => QuitApp());
         tray.ContextMenuStrip = menu;
 
@@ -222,6 +237,7 @@ sealed class FlagshipRouterApp : Form
         Shown += (s, e) => InitWeb();
         StartServer();
         healthTimer.Start();
+        Task.Run(() => { Thread.Sleep(20000); if (!quitting) CheckForUpdates(manual: false); });
     }
 
     void ShowWindow()
@@ -462,5 +478,169 @@ sealed class FlagshipRouterApp : Form
         tray.Visible = false;
         tray.Dispose();
         Application.Exit();
+    }
+
+    // ---------- Self-update from GitHub releases ----------
+    // Compares baked-in AppVersion against the latest release tag
+    // (build-<upstream_sha>). Dashboard-only changes swap server/ in place;
+    // a changed EXE swaps the whole folder. No rebuild needed by the user.
+
+    bool updating;
+
+    void CheckForUpdates(bool manual)
+    {
+        if (updating) return;
+        updating = true;
+        Task.Run(() =>
+        {
+            try
+            {
+                string latest = FetchLatestReleaseTag();
+                if (string.IsNullOrEmpty(latest))
+                {
+                    if (manual) ShowUpdateMsg("Could not reach GitHub releases. Try again later.");
+                    return;
+                }
+                string want = latest.StartsWith("build-") ? latest.Substring(6) : latest;
+                if (string.Equals(want, StampedVersion, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (manual) ShowUpdateMsg("Already up to date (" + StampedVersion + ").");
+                    return;
+                }
+                string assetUrl = "https://github.com/" + UpdateOwner + "/" + UpdateRepo +
+                    "/releases/download/" + latest + "/" + UpdateAsset;
+                BeginInvoke(new Action(() => { if (updateItem != null) updateItem.Text = "Downloading update..."; }));
+                string zip = Path.Combine(Path.GetTempPath(), "FlagshipRouter-update.zip");
+                using (var wc = new System.Net.WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "FlagshipRouter-Updater");
+                    wc.DownloadFile(assetUrl, zip);
+                }
+                ApplyUpdate(zip, want);
+            }
+            catch (Exception ex)
+            {
+                Log("update failed: " + ex.Message);
+                if (manual) ShowUpdateMsg("Update failed: " + ex.Message);
+            }
+            finally { updating = false; }
+        });
+    }
+
+    string FetchLatestReleaseTag()
+    {
+        try
+        {
+            using (var wc = new System.Net.WebClient())
+            {
+                wc.Headers.Add("User-Agent", "FlagshipRouter-Updater");
+                string json = wc.DownloadString("https://api.github.com/repos/" + UpdateOwner + "/" + UpdateRepo + "/releases/latest");
+                int i = json.IndexOf("\"tag_name\"");
+                if (i < 0) return null;
+                int c = json.IndexOf(':', i) + 1;
+                int q1 = json.IndexOf('"', c) + 1;
+                int q2 = json.IndexOf('"', q1);
+                return json.Substring(q1, q2 - q1);
+            }
+        }
+        catch { return null; }
+    }
+
+    void ShowUpdateMsg(string text)
+    {
+        try { BeginInvoke(new Action(() => tray.ShowBalloonTip(5000, AppName + " Update", text, ToolTipIcon.Info))); }
+        catch { }
+    }
+
+    void ApplyUpdate(string zipPath, string newVersion)
+    {
+        try
+        {
+            string appDir = AppContext.BaseDirectory;
+            string stage = Path.Combine(Path.GetTempPath(), "FlagshipRouter-update");
+            if (Directory.Exists(stage)) Directory.Delete(stage, true);
+            Directory.CreateDirectory(stage);
+            // Expand-Archive via powershell (available on all Win10/11).
+            var psi = new ProcessStartInfo("powershell",
+                "-NoProfile -Command \"Expand-Archive -Force '" + zipPath + "' '" + stage + "'\"")
+            {
+                UseShellExecute = false, CreateNoWindow = true
+            };
+            var p = Process.Start(psi);
+            p.WaitForExit(120000);
+
+            string stagedServer = Path.Combine(stage, "server");
+            string stagedExe = Path.Combine(stage, "FlagshipRouter.exe");
+            bool exeChanged = File.Exists(stagedExe) && !FilesEqual(stagedExe, Path.Combine(appDir, "FlagshipRouter.exe"));
+
+            if (!exeChanged && Directory.Exists(stagedServer))
+            {
+                // Dashboard-only update: swap server/ live, restart node only.
+                string live = Path.Combine(appDir, "server");
+                string backup = live + ".prev";
+                if (Directory.Exists(backup)) Directory.Delete(backup, true);
+                StopServerOnly();
+                Directory.Move(live, backup);
+                Directory.Move(stagedServer, live);
+                try { Directory.Delete(backup, true); } catch { }
+                Directory.Delete(stage, true);
+                try { File.Delete(zipPath); } catch { }
+                StampedVersion = newVersion;
+                Log("dashboard updated to " + newVersion);
+                StartServer();
+                ShowUpdateMsg("Dashboard updated to " + newVersion + ".");
+                BeginInvoke(new Action(() => { if (updateItem != null) updateItem.Text = "Check for Updates"; }));
+            }
+            else
+            {
+                // EXE changed: stage a swap script, quit, relaunch.
+                string swap = Path.Combine(Path.GetTempPath(), "FlagshipRouter-swap.bat");
+                File.WriteAllText(swap,
+                    "@echo off\r\n" +
+                    "timeout /t 3 /nobreak >nul\r\n" +
+                    "xcopy \"" + stage + "\\*\" \"" + appDir + "\" /E /Y /Q\r\n" +
+                    "start \"\" \"" + Path.Combine(appDir, "FlagshipRouter.exe") + "\"\r\n" +
+                    "del \"%~f0\"\r\n");
+                Log("exe update staged to " + newVersion + ", relaunching");
+                Process.Start(new ProcessStartInfo(swap) { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden });
+                QuitApp();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log("apply update failed: " + ex.Message);
+            ShowUpdateMsg("Update failed: " + ex.Message);
+        }
+    }
+
+    void StopServerOnly()
+    {
+        try
+        {
+            if (serverProc != null && !serverProc.HasExited)
+            {
+                serverProc.Kill();
+                serverProc.WaitForExit(8000);
+            }
+        }
+        catch { }
+        serverProc = null;
+    }
+
+    static bool FilesEqual(string a, string b)
+    {
+        try
+        {
+            using (var fa = File.OpenRead(a))
+            using (var fb = File.OpenRead(b))
+            {
+                if (fa.Length != fb.Length) return false;
+                int x, y;
+                do { x = fa.ReadByte(); y = fb.ReadByte(); }
+                while (x == y && x != -1);
+                return x == y;
+            }
+        }
+        catch { return false; }
     }
 }

@@ -14,8 +14,16 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <DebugType>none</DebugType>
-    <InvariantGlobalization>true</InvariantGlobalization>
+<InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+  <!-- CI stamps version: dotnet publish /p:AppVersion=<sha> writes app.version next to EXE -->
+  <Target Name="WriteAppVersion" AfterTargets="Publish">
+    <PropertyGroup>
+      <_Ver Condition="'$(AppVersion)' == ''">dev-local</_Ver>
+      <_Ver Condition="'$(AppVersion)' != ''">$(AppVersion)</_Ver>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(PublishDir)app.version" Overwrite="true" Lines="$(_Ver)" />
+  </Target>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.27" />
   </ItemGroup>
