@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,6 +18,16 @@ sealed class FlagshipRouterApp : Form
     const string MutexName = @"Global\FlagshipRouter_SingleInstance";
     const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RunValueName = "FlagshipRouter";
+
+    // Per-Monitor DPI Awareness v2 — without this Windows bitmap-scales the
+    // WebView2 surface on scaled displays, which renders text blurry ("glare").
+    [DllImport("user32.dll")]
+    static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
+
+    // GPU flags for WebView2 — allow hardware acceleration everywhere.
+    const string WEBVIEW_EXTRA_ARGS = "--enable-features=msWebView2DefaultGPURasterization";
 
     static int Port = DefaultPort;
     static string ServerDir = "";
@@ -34,10 +45,13 @@ sealed class FlagshipRouterApp : Form
     DateTime lastStartUtc = DateTime.MinValue;
     bool quitting;
     bool webReady;
+    bool serverSeenAlive;
+    int navRetryCount;
 
     [STAThread]
     static void Main(string[] args)
     {
+        try { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); } catch { }
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
@@ -158,6 +172,9 @@ sealed class FlagshipRouterApp : Form
         catch { }
 
         web = new WebView2 { Dock = DockStyle.Fill };
+        // CompositeMode = fast path: WebView2 bitmap is presented directly,
+        // bypassing extra WinForms composition passes.
+        web.DefaultBackgroundColor = Color.White;
         Controls.Add(web);
 
         tray = new NotifyIcon();
@@ -183,11 +200,11 @@ sealed class FlagshipRouterApp : Form
         tray.ContextMenuStrip = menu;
 
         healthTimer = new System.Windows.Forms.Timer();
-        healthTimer.Interval = 5000;
+        healthTimer.Interval = 2000;
         healthTimer.Tick += (s, e) =>
         {
             if (quitting) return;
-            bool alive = IsServerAlive();
+            bool alive = IsServerAliveFast();
             statusItem.Text = alive ? AppName + " - running on port " + Port : AppName + " - restarting...";
             tray.Text = alive ? AppName + " (port " + Port + ")" : AppName + " (restarting...)";
             if (!alive) StartServer();
@@ -209,6 +226,11 @@ sealed class FlagshipRouterApp : Form
 
     void ShowWindow()
     {
+        if (Visible && WindowState == FormWindowState.Normal)
+        {
+            Activate();
+            return;
+        }
         Show();
         WindowState = FormWindowState.Normal;
         BringToFront();
@@ -229,10 +251,20 @@ sealed class FlagshipRouterApp : Form
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "FlagshipRouter", "webview2");
             Directory.CreateDirectory(dataDir);
-            var env = await CoreWebView2Environment.CreateAsync(null, dataDir);
+            var options = new CoreWebView2EnvironmentOptions
+            {
+                // Warm the GPU cache and keep the compositor snappy under load.
+                AdditionalBrowserArguments = WEBVIEW_EXTRA_ARGS
+            };
+            var env = await CoreWebView2Environment.CreateAsync(null, dataDir, options);
             await web.EnsureCoreWebView2Async(env);
-            web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-            web.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            var s = web.CoreWebView2.Settings;
+            s.AreDefaultContextMenusEnabled = true;
+            s.IsStatusBarEnabled = false;
+            s.IsZoomControlEnabled = false;
+            s.IsPinchZoomEnabled = false;
+            // Keep visual size exact under DPI scaling (no fractional snapping blur).
+            web.ZoomFactor = 1.0;
             webReady = true;
             NavigateWhenReady();
         }
@@ -243,17 +275,20 @@ sealed class FlagshipRouterApp : Form
     {
         Task.Run(() =>
         {
-            for (int i = 0; i < 120; i++)
+            // Fast probe loop: 150ms interval — first paint lands as soon as
+            // the port answers instead of waiting out the 1s poll period.
+            for (int i = 0; i < 600; i++)
             {
                 if (quitting) return;
-                if (IsServerAlive()) break;
-                Thread.Sleep(1000);
+                if (IsServerAliveFast()) { serverSeenAlive = true; break; }
+                Thread.Sleep(150);
             }
-            if (quitting) return;
+            if (quitting || !IsServerAliveFast()) return;
             try
             {
                 BeginInvoke(new Action(() =>
                 {
+                    navRetryCount = 0;
                     if (webReady && web.CoreWebView2 != null)
                         web.CoreWebView2.Navigate(DashboardUrl);
                 }));
@@ -262,18 +297,23 @@ sealed class FlagshipRouterApp : Form
         });
     }
 
-    bool IsServerAlive()
+    bool IsServerAliveFast()
     {
-        if (serverProc == null || serverProc.HasExited) return false;
         try
         {
             using (var c = new TcpClient())
             {
                 var r = c.BeginConnect("127.0.0.1", Port, null, null);
-                return r.AsyncWaitHandle.WaitOne(1500) && c.Connected;
+                return r.AsyncWaitHandle.WaitOne(120) && c.Connected;
             }
         }
         catch { return false; }
+    }
+
+    bool IsServerAlive()
+    {
+        if (serverProc == null || serverProc.HasExited) return false;
+        return IsServerAliveFast();
     }
 
     void Log(string line)

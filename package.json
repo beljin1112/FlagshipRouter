@@ -5,6 +5,6 @@
   "private": true,
   "scripts": {
     "build:exe": "dotnet publish windows/FlagshipRouter.csproj -c Release -o windows/bin",
-    "package": "node windows/package.mjs"
+    "package": "node windows/package.cjs"
   }
 }

@@ -8,15 +8,18 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const dist = path.join(root, "windows", "dist");
 const standalone = path.join(root, ".next", "standalone");
+const serverBuild = path.join(root, "windows", "server-build");
 
 if (!fs.existsSync(path.join(root, "windows", "bin", "FlagshipRouter.exe"))) {
   console.error("Missing windows/bin/FlagshipRouter.exe — run: npm run build:exe");
   process.exit(1);
 }
-if (!fs.existsSync(standalone)) {
-  console.error("Missing .next/standalone — restore the web sources snapshot (git checkout 49bf7b8^ -- .) and run the Next.js build first.");
+if (!fs.existsSync(standalone) && !fs.existsSync(serverBuild)) {
+  console.error("Missing server build: need .next/standalone or windows/server-build.");
+  console.error("Restore the web sources snapshot (git checkout 49bf7b8^ -- .) and run the Next.js build first, or keep windows/server-build.");
   process.exit(1);
 }
+const serverSrc = fs.existsSync(standalone) ? standalone : serverBuild;
 
 if (fs.existsSync(dist)) fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist, { recursive: true });
@@ -32,7 +35,7 @@ function copyDir(src, dest) {
 }
 
 fs.copyFileSync(path.join(root, "windows", "bin", "FlagshipRouter.exe"), path.join(dist, "FlagshipRouter.exe"));
-copyDir(standalone, path.join(dist, "server"));
+copyDir(serverSrc, path.join(dist, "server"));
 
 const nodeDir = path.join(dist, "node");
 fs.mkdirSync(nodeDir, { recursive: true });
